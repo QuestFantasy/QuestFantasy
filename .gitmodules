@@ -1,6 +1,7 @@
 [submodule "backend"]
 	path = backend
-	url = git@github.com:QuestFantasy/QuestFantasy-Backend.git
+	url = https://github.com/QuestFantasy/QuestFantasy-Backend.git
 [submodule "frontend"]
 	path = frontend
-	url = git@github.com:QuestFantasy/QuestFantasy-Frontend.git
+	url = https://github.com/QuestFantasy/QuestFantasy-Frontend.git
+

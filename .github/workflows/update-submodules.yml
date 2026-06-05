@@ -1,0 +1,84 @@
+name: Update Submodules
+
+on:
+  schedule:
+    # Runs every day at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # Allows manual triggering from the Actions tab
+    inputs:
+      branch:
+        description: 'Branch to update submodules on'
+        required: true
+        default: 'main'
+
+# Grant write permissions so the workflow can push commits and open PRs
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-submodules:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Parent Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+          # Checks out submodules recursively
+          submodules: recursive
+          # Fetch all history so we can branch and push properly
+          fetch-depth: 0
+
+      - name: Configure Git Bot
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Update Submodules to Latest Remote Commits
+        run: |
+          echo "Updating all submodules..."
+          git submodule update --init --recursive --remote
+
+      - name: Check for Changes
+        id: git-check
+        run: |
+          # Check if there are modified files (specifically submodule pointer updates)
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "Submodule changes detected."
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "No submodule changes detected."
+          fi
+
+      - name: Create Pull Request for Submodule Updates
+        if: steps.git-check.outputs.changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Generate unique branch name
+          BRANCH_NAME="automation/update-submodules-$(date +%Y%m%d-%H%M%S)"
+          TARGET_BRANCH="${{ github.event.inputs.branch || github.ref_name || 'main' }}"
+          
+          echo "Creating local branch: $BRANCH_NAME"
+          git checkout -b "$BRANCH_NAME"
+          
+          # Stage and commit submodule pointer updates
+          git add backend frontend
+          
+          COMMIT_MSG="chore(deps): auto-update submodules backend and frontend"
+          PR_TITLE="chore(deps): auto-update submodules"
+          
+          git commit -m "$COMMIT_MSG"
+          
+          echo "Pushing branch $BRANCH_NAME to origin..."
+          git push origin "$BRANCH_NAME"
+          
+          echo "Creating Pull Request..."
+          gh pr create \
+            --title "$PR_TITLE" \
+            --body "This is an automated pull request to update the git submodules (\`backend\` and \`frontend\`) to their latest remote tracking branch commits." \
+            --base "$TARGET_BRANCH" \
+            --head "$BRANCH_NAME"
